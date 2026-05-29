@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Revolut — Monte Carlo Valuation Engine | financetamil</title>
+<meta name="description" content="Interactive Monte Carlo DCF valuation model for Revolut Group Holdings. 10,000 simulations anchored to FY2025 actuals. Built by Tamileniyan Thirumalainathan.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#060b10;color:#e8f4fd;font-family:'Courier New',monospace;font-size:12px;min-height:100vh}
+:root{
+  --bg:#060b10;--bg2:#0c1520;--bg3:#112030;--bg4:#162840;
+  --border:#1a3045;--border2:#1f3a55;--border3:#254465;
+  --accent:#00d4ff;--accent2:#0099cc;
+  --green:#00e676;--red:#ff1744;--amber:#ffc400;--purple:#bb86fc;--orange:#ff6d00;
+  --text:#e8f4fd;--text2:#8ab4cc;--text3:#4a7a99;--text4:#2a4a60;
+}
+
+/* ── LAYOUT ── */
+.wrapper{max-width:1200px;margin:0 auto;padding:16px}
+.dash{background:var(--bg);border:1px solid var(--border2);border-radius:8px;overflow:hidden}
+
+/* ── TOP BAR ── */
+.topbar{background:var(--bg2);border-bottom:1px solid var(--border2);padding:12px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ticker{background:var(--accent);color:#000;font-weight:900;font-size:11px;padding:3px 10px;border-radius:3px;letter-spacing:1.5px}
+.co-name{font-size:16px;font-weight:700;color:var(--accent);letter-spacing:0.3px}
+.tag{background:var(--bg3);border:1px solid var(--border2);color:var(--text3);font-size:9px;padding:2px 8px;border-radius:2px;letter-spacing:0.5px}
+.topbar-right{margin-left:auto;display:flex;gap:12px;align-items:center;font-size:9px;color:var(--text3)}
+.live{display:flex;align-items:center;gap:5px;color:var(--green);font-weight:700}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink 1.4s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.15}}
+.gh-link{color:var(--accent);text-decoration:none;font-size:9px;border:1px solid var(--border2);padding:3px 8px;border-radius:2px;transition:border-color .2s}
+.gh-link:hover{border-color:var(--accent)}
+
+/* ── KPI STRIP ── */
+.kpi-strip{display:grid;grid-template-columns:repeat(6,1fr);border-bottom:1px solid var(--border2)}
+.kpi{background:var(--bg2);padding:11px 14px;border-right:1px solid var(--border2)}
+.kpi:last-child{border-right:none}
+.kpi-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px}
+.kpi-v{font-size:19px;font-weight:700;color:var(--accent);line-height:1.1}
+.kpi-v.grn{color:var(--green)}.kpi-v.amb{color:var(--amber)}.kpi-v.pur{color:var(--purple)}
+.kpi-sub{font-size:9px;color:var(--text3);margin-top:3px}
+
+/* ── MAIN GRID ── */
+.main{display:grid;grid-template-columns:210px 1fr}
+
+/* ── SIDEBAR ── */
+.sb{background:var(--bg2);padding:14px;border-right:1px solid var(--border2);display:flex;flex-direction:column;gap:16px}
+.sb-title{font-size:9px;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;padding-bottom:5px;border-bottom:1px solid var(--border);margin-bottom:8px}
+.ctrl{margin-bottom:10px}
+.ctrl-lbl{font-size:9px;color:var(--text2);display:flex;justify-content:space-between;margin-bottom:4px}
+.ctrl-val{color:var(--accent);font-weight:700}
+input[type=range]{width:100%;height:2px;-webkit-appearance:none;background:var(--border3);border-radius:2px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);cursor:pointer}
+.run-btn{width:100%;background:var(--accent);color:#000;border:none;padding:9px;font-family:'Courier New',monospace;font-size:10px;font-weight:900;letter-spacing:1.5px;border-radius:3px;cursor:pointer;transition:background .2s;margin-top:4px}
+.run-btn:hover{background:#33ddff}
+.run-btn:active{transform:scale(0.98)}
+
+/* ── CONTENT ── */
+.content{background:var(--bg);padding:14px;display:flex;flex-direction:column;gap:10px;min-height:520px}
+.tabs{display:flex;gap:1px;background:var(--border);border-radius:3px 3px 0 0;overflow:hidden;margin-bottom:12px}
+.tab{background:var(--bg2);border:none;color:var(--text3);font-family:'Courier New',monospace;font-size:9px;letter-spacing:0.8px;padding:7px 13px;cursor:pointer;text-transform:uppercase;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap}
+.tab:hover{color:var(--text2);background:var(--bg3)}
+.tab.active{color:var(--accent);background:var(--bg3);border-bottom-color:var(--accent)}
+.pnl{display:none}.pnl.active{display:block}
+
+/* ── STAT BAND ── */
+.sband{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+.sc{background:var(--bg2);border:1px solid var(--border2);border-radius:3px;padding:9px 10px;text-align:center}
+.sc .sl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
+.sc .sv{font-size:17px;font-weight:700}
+.sv.bear{color:var(--red)}.sv.base{color:var(--amber)}.sv.bull{color:var(--green)}.sv.pr{color:var(--purple)}
+
+.chart-wrap{position:relative;width:100%;height:210px}
+.legend-row{display:flex;gap:16px;margin-top:6px;font-size:8px;color:var(--text3);flex-wrap:wrap}
+.legend-dot{display:inline-block;width:8px;height:8px;border-radius:1px;margin-right:3px;vertical-align:middle}
+.note{font-size:8px;color:var(--text4);margin-top:6px;line-height:1.5}
+
+/* ── CASH FLOW TABLE ── */
+.tbl-wrap{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:10px;min-width:700px}
+.tbl th{background:var(--bg3);color:var(--text3);font-size:8px;text-transform:uppercase;letter-spacing:0.8px;padding:7px 8px;border-bottom:1px solid var(--border2);text-align:right;white-space:nowrap}
+.tbl th:first-child{text-align:left;width:180px}
+.tbl td{padding:5px 8px;border-bottom:1px solid var(--border);color:var(--text2);text-align:right;white-space:nowrap}
+.tbl td:first-child{text-align:left;color:var(--text)}
+.tbl tr:hover td{background:var(--bg3)}
+.tbl .grn{color:var(--green)}.tbl .red{color:var(--red)}.tbl .amb{color:var(--amber)}
+.tbl .acc{color:var(--accent)}.tbl .pur{color:var(--purple)}.tbl .text3{color:var(--text3)}
+.tbl .total td{background:var(--bg4);font-weight:700;border-top:1px solid var(--border3)}
+
+/* ── REV MIX ── */
+.rev-stream{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.rev-lbl{width:120px;font-size:9px;color:var(--text2);flex-shrink:0}
+.rev-bg{flex:1;height:15px;background:var(--bg3);border-radius:2px;overflow:hidden}
+.rev-fill{height:100%;border-radius:2px;display:flex;align-items:center;padding-left:5px;font-size:8px;font-weight:700;color:#000;min-width:30px}
+.rev-amt{width:55px;text-align:right;font-size:9px;color:var(--text2)}
+
+/* ── SCENARIO ── */
+.badge{display:inline-block;font-size:8px;padding:2px 7px;border-radius:2px;font-weight:700;letter-spacing:0.5px}
+.badge.bear{background:#ff174425;color:var(--red);border:1px solid #ff174445}
+.badge.base{background:#ffc40025;color:var(--amber);border:1px solid #ffc40045}
+.badge.bull{background:#00e67625;color:var(--green);border:1px solid #00e67645}
+
+/* ── SENSITIVITY ── */
+.sens-row{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.sens-lbl{width:150px;font-size:9px;color:var(--text2);flex-shrink:0}
+.sens-bg{flex:1;height:7px;background:var(--bg3);border-radius:2px;overflow:hidden}
+.sens-fill{height:100%;border-radius:2px;transition:width .5s}
+.sens-num{width:60px;text-align:right;font-size:9px;font-weight:700}
+
+/* ── COMP CARDS ── */
+.comp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.comp-card{background:var(--bg2);border:1px solid var(--border2);border-radius:4px;padding:11px}
+.comp-card.hl{border-color:var(--accent);background:var(--bg3)}
+.comp-co{font-size:11px;font-weight:700;color:var(--text2);margin-bottom:7px}
+.comp-co.primary{color:var(--accent)}
+.comp-row{display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-bottom:3px;padding-bottom:3px;border-bottom:1px solid var(--border)}
+.comp-row span{color:var(--text);font-weight:700}
+.comp-mult{font-size:15px;font-weight:700;color:var(--green);margin-top:6px}
+
+/* ── FOOTER ── */
+.footer{background:var(--bg2);border-top:1px solid var(--border2);padding:8px 18px;display:flex;gap:20px;font-size:8px;color:var(--text4);flex-wrap:wrap;align-items:center}
+.footer b{color:var(--text3)}
+.footer-right{margin-left:auto;color:var(--text3)}
+
+/* ── RESPONSIVE ── */
+@media(max-width:800px){
+  .main{grid-template-columns:1fr}
+  .sb{border-right:none;border-bottom:1px solid var(--border2)}
+  .kpi-strip{grid-template-columns:repeat(3,1fr)}
+  .comp-grid{grid-template-columns:repeat(2,1fr)}
+  .sband{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:500px){
+  .kpi-strip{grid-template-columns:repeat(2,1fr)}
+  .comp-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrapper">
+<div class="dash">
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <span class="ticker">REVOLUT</span>
+  <span class="co-name">Revolut Group Holdings Ltd</span>
+  <span class="tag">Fintech / Neobank</span>
+  <span class="tag">Private — London</span>
+  <span class="tag">Monte Carlo DCF + EV/Rev Blended</span>
+  <span class="tag">FY2025 Actuals</span>
+  <div class="topbar-right">
+    <a class="gh-link" href="https://github.com/financetamil" target="_blank">⌥ github.com/financetamil</a>
+    <span class="live"><div class="pulse"></div>LIVE MODEL</span>
+  </div>
+</div>
+
+<!-- KPI STRIP -->
+<div class="kpi-strip">
+  <div class="kpi"><div class="kpi-lbl">Mean Equity Value</div><div class="kpi-v" id="k-mean">—</div><div class="kpi-sub" id="k-med">Median: —</div></div>
+  <div class="kpi"><div class="kpi-lbl">Base Case (DCF)</div><div class="kpi-v amb" id="k-base">—</div><div class="kpi-sub" id="k-base-sub">WACC: —</div></div>
+  <div class="kpi"><div class="kpi-lbl">P10 / P90 Band</div><div class="kpi-v" id="k-band">—</div><div class="kpi-sub">90% confidence interval</div></div>
+  <div class="kpi"><div class="kpi-lbl">Base Case EV</div><div class="kpi-v grn" id="k-ev">—</div><div class="kpi-sub" id="k-ev-sub">EV/Rev: —</div></div>
+  <div class="kpi"><div class="kpi-lbl">Mkt Val vs P50</div><div class="kpi-v pur" id="k-prem">—</div><div class="kpi-sub">vs $75B secondary (Nov 2025)</div></div>
+  <div class="kpi"><div class="kpi-lbl">Iterations</div><div class="kpi-v grn" id="k-iter">10,000</div><div class="kpi-sub" id="k-ms">—</div></div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sb">
+    <div>
+      <div class="sb-title">Simulation Control</div>
+      <div class="ctrl">
+        <div class="ctrl-lbl">Iterations <span class="ctrl-val" id="lbl-N">10,000</span></div>
+        <input type="range" id="sl-N" min="2000" max="30000" step="1000" value="10000">
+      </div>
+      <button class="run-btn" id="run-btn">▶ RUN MONTE CARLO</button>
+    </div>
+    <div>
+      <div class="sb-title">Revenue Growth</div>
+      <div class="ctrl"><div class="ctrl-lbl">Mean CAGR <span class="ctrl-val" id="lbl-rev">38%</span></div><input type="range" id="sl-rev" min="10" max="75" step="1" value="38"></div>
+      <div class="ctrl"><div class="ctrl-lbl">Std Dev <span class="ctrl-val" id="lbl-revsd">16%</span></div><input type="range" id="sl-revsd" min="5" max="35" step="1" value="16"></div>
+    </div>
+    <div>
+      <div class="sb-title">Profitability</div>
+      <div class="ctrl"><div class="ctrl-lbl">PBT Margin (mode) <span class="ctrl-val" id="lbl-m">38%</span></div><input type="range" id="sl-m" min="10" max="60" step="1" value="38"></div>
+      <div class="ctrl"><div class="ctrl-lbl">Min Offset below Mode <span class="ctrl-val" id="lbl-moff">14%</span></div><input type="range" id="sl-moff" min="5" max="28" step="1" value="14"></div>
+    </div>
+    <div>
+      <div class="sb-title">Discount Rate</div>
+      <div class="ctrl"><div class="ctrl-lbl">WACC Mean <span class="ctrl-val" id="lbl-w">11%</span></div><input type="range" id="sl-w" min="7" max="18" step="0.5" value="11"></div>
+      <div class="ctrl"><div class="ctrl-lbl">Terminal Growth <span class="ctrl-val" id="lbl-tg">3.5%</span></div><input type="range" id="sl-tg" min="1" max="6" step="0.5" value="3.5"></div>
+    </div>
+    <div>
+      <div class="sb-title">Blended Pricing</div>
+      <div class="ctrl"><div class="ctrl-lbl">DCF Weight <span class="ctrl-val" id="lbl-dw">60%</span></div><input type="range" id="sl-dw" min="20" max="80" step="10" value="60"></div>
+      <div style="font-size:9px;color:var(--text3);margin-top:2px">EV/Rev weight: <span id="lbl-ew" style="color:var(--accent)">40%</span></div>
+      <div style="font-size:8px;color:var(--text4);margin-top:6px;line-height:1.5">Peer EV/Rev median: ~7–17x. Blended approach reduces DCF sensitivity to single WACC assumption.</div>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+    <div class="tabs">
+      <button class="tab active" data-t="dist">Price Distribution</button>
+      <button class="tab" data-t="cf">Cash Flow Model</button>
+      <button class="tab" data-t="revmix">Revenue Mix</button>
+      <button class="tab" data-t="scen">Scenarios</button>
+      <button class="tab" data-t="sens">Sensitivity</button>
+      <button class="tab" data-t="comp">Comparables</button>
+    </div>
+
+    <!-- DISTRIBUTION -->
+    <div class="pnl active" id="pnl-dist">
+      <div class="sband">
+        <div class="sc"><div class="sl">P10 Bear</div><div class="sv bear" id="s-p10">—</div></div>
+        <div class="sc"><div class="sl">P50 Median</div><div class="sv base" id="s-p50">—</div></div>
+        <div class="sc"><div class="sl">P90 Bull</div><div class="sv bull" id="s-p90">—</div></div>
+        <div class="sc"><div class="sl">Prob &gt; $75B</div><div class="sv pr" id="s-prob">—</div></div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="distC" role="img" aria-label="Histogram of 10,000 Monte Carlo simulated equity values for Revolut Group"></canvas>
+      </div>
+      <div class="legend-row">
+        <span><span class="legend-dot" style="background:var(--red)"></span>Bear (&lt;P10)</span>
+        <span><span class="legend-dot" style="background:#00d4ff"></span>Base range (P10–P90)</span>
+        <span><span class="legend-dot" style="background:var(--green)"></span>Bull (&gt;P90)</span>
+        <span style="margin-left:auto">Distributions: log-normal revenue &amp; WACC | triangular margin</span>
+      </div>
+      <div class="note">Base anchors: FY2025 Revenue £4.5B | PBT £1.7B (38% margin) | Current secondary valuation $75B (Nov 2025) | USD/GBP 1.27 | Net cash £1.5B assumed</div>
+    </div>
+
+    <!-- CASH FLOW MODEL -->
+    <div class="pnl" id="pnl-cf">
+      <div style="font-size:9px;color:var(--text3);margin-bottom:8px">Base case 5-year FCF projection — FY2023–2025 actuals from Revolut annual reports. FY2026–2030 model estimates. Values in £B.</div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>Line Item (£B)</th>
+              <th>FY2023A</th><th>FY2024A</th><th>FY2025A</th>
+              <th style="color:var(--accent)">FY2026E</th><th style="color:var(--accent)">FY2027E</th>
+              <th style="color:var(--accent)">FY2028E</th><th style="color:var(--accent)">FY2029E</th><th style="color:var(--accent)">FY2030E</th>
+            </tr>
+          </thead>
+          <tbody id="cf-body"></tbody>
+        </table>
+      </div>
+      <div class="note" style="margin-top:8px">A = Actual (Revolut annual reports) | E = Model estimate | Tax rate 21% | Reinvestment ratio 28% | WACC: <span id="cf-wacc-lbl" style="color:var(--accent)">11%</span> | Terminal growth: <span id="cf-tg-lbl" style="color:var(--accent)">3.5%</span></div>
+    </div>
+
+    <!-- REVENUE MIX -->
+    <div class="pnl" id="pnl-revmix">
+      <div style="font-size:9px;color:var(--text3);margin-bottom:10px">Revenue stream breakdown — FY2023A, FY2024A, FY2025A. Source: Revolut Group annual reports.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div>
+          <div style="font-size:9px;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.8px">FY2025 Revenue Mix (£4.5B)</div>
+          <div id="mix25"></div>
+        </div>
+        <div>
+          <div style="font-size:9px;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.8px">Annual Revenue &amp; PBT (£B)</div>
+          <div class="chart-wrap" style="height:190px">
+            <canvas id="growthC" role="img" aria-label="Bar chart of Revolut revenue and PBT from 2023 to 2025"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="note" style="margin-top:12px">Fee-based revenues (cards, subscriptions, wealth, FX) = <span style="color:var(--accent)">76%</span> of total 2025 revenue — structurally less interest-rate sensitive than traditional banks. 11 product lines each exceed £100M annually. 4-year revenue CAGR: 76% (source: a16z analysis of Revolut 2025 report).</div>
+    </div>
+
+    <!-- SCENARIOS -->
+    <div class="pnl" id="pnl-scen">
+      <div style="font-size:9px;color:var(--text3);margin-bottom:8px">Five named scenarios from Deep Bear to Super Bull. All vs $75B Nov 2025 secondary valuation.</div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Scenario</th><th>Rev CAGR</th><th>PBT Margin</th><th>WACC</th><th>Term. Growth</th><th>EV (£B)</th><th>Equity ($B)</th><th>EV/Rev</th><th>vs $75B</th></tr></thead>
+          <tbody id="scen-body"></tbody>
+        </table>
+      </div>
+      <div class="note" style="margin-top:8px">Base: FY2025 Rev £4.5B | Net cash £1.5B | USD/GBP 1.27 | 5-yr explicit FCF + Gordon Growth terminal value | Blended DCF + EV/Rev weighting applied</div>
+    </div>
+
+    <!-- SENSITIVITY -->
+    <div class="pnl" id="pnl-sens">
+      <div style="font-size:9px;color:var(--text3);margin-bottom:12px">Impact on P50 median equity value. Each variable shocked by ±1 std deviation while others held at mean. Bars sized by absolute dollar impact.</div>
+      <div id="sens-cont"></div>
+      <div class="note" style="margin-top:12px">WACC is the dominant value driver — a 200bps shift moves P50 more than a 10pp change in revenue CAGR. This reflects Revolut's long-duration growth profile and sensitivity to discount rate assumptions at IPO pricing.</div>
+    </div>
+
+    <!-- COMPARABLES -->
+    <div class="pnl" id="pnl-comp">
+      <div style="font-size:9px;color:var(--text3);margin-bottom:10px">Fintech peer EV/Revenue multiples — contextualising Revolut's $75B private valuation.</div>
+      <div class="comp-grid" id="comp-grid"></div>
+      <div class="note" style="margin-top:10px">Sources: company annual reports, secondary share sales, public market data (May 2026). Revolut EV/Rev based on $75B Nov 2025 valuation vs £4.5B FY2025 revenue at USD/GBP 1.27. Public peer multiples based on latest reported revenue.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <span><b>Model:</b> 5-yr explicit FCF + Gordon Growth TV | Log-normal Rev &amp; WACC | Triangular Margin</span>
+  <span><b>Data:</b> FY2023 £1.8B | FY2024 £3.1B | FY2025 £4.5B | PBT 2025 £1.7B — Revolut Annual Reports</span>
+  <span><b>Built by:</b> Tamileniyan Thirumalainathan</span>
+  <div class="footer-right">
+    <a href="https://linkedin.com/in/tamileniyan-thirumalainathan-30288515a" target="_blank" style="color:var(--accent);text-decoration:none;margin-right:12px">LinkedIn</a>
+    <a href="https://github.com/financetamil" target="_blank" style="color:var(--accent);text-decoration:none">GitHub</a>
+    &nbsp;|&nbsp; Educational purposes only — not investment advice
+  </div>
+</div>
+
+</div><!-- .dash -->
+</div><!-- .wrapper -->
+
+<script>
+const $=id=>document.getElementById(id);
+
+/* ── SLIDERS ── */
+const sliders=[
+  {id:'sl-N',   lbl:'lbl-N',   fmt:v=>Number(v).toLocaleString()},
+  {id:'sl-rev', lbl:'lbl-rev', fmt:v=>v+'%'},
+  {id:'sl-revsd',lbl:'lbl-revsd',fmt:v=>v+'%'},
+  {id:'sl-m',   lbl:'lbl-m',   fmt:v=>v+'%'},
+  {id:'sl-moff',lbl:'lbl-moff',fmt:v=>v+'%'},
+  {id:'sl-w',   lbl:'lbl-w',   fmt:v=>v+'%'},
+  {id:'sl-tg',  lbl:'lbl-tg',  fmt:v=>v+'%'},
+  {id:'sl-dw',  lbl:'lbl-dw',  fmt:v=>v+'%'},
+];
+sliders.forEach(s=>{
+  const el=$(s.id),lb=$(s.lbl);
+  lb.textContent=s.fmt(el.value);
+  el.addEventListener('input',()=>{
+    lb.textContent=s.fmt(el.value);
+    if(s.id==='sl-dw'){$('lbl-ew').textContent=(100-parseInt(el.value))+'%';}
+  });
+});
+$('sl-dw').dispatchEvent(new Event('input'));
+
+/* ── TABS ── */
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.pnl').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    $('pnl-'+t.dataset.t).classList.add('active');
+  });
+});
+
+/* ── RANDOM UTILS ── */
+function randn(){
+  let u=0,v=0;
+  while(!u)u=Math.random();while(!v)v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+function lnorm(mean,sd){
+  const mu=Math.log(mean*mean/Math.sqrt(sd*sd+mean*mean));
+  const sig=Math.sqrt(Math.log(1+(sd*sd)/(mean*mean)));
+  return Math.exp(mu+sig*randn());
+}
+function tri(min,mode,max){
+  const u=Math.random(),fc=(mode-min)/(max-min);
+  if(u<fc)return min+Math.sqrt(u*(max-min)*(mode-min));
+  return max-Math.sqrt((1-u)*(max-min)*(max-mode));
+}
+
+/* ── PARAMS ── */
+function getP(){
+  return{
+    N:parseInt($('sl-N').value),
+    rev:parseFloat($('sl-rev').value)/100,
+    revsd:parseFloat($('sl-revsd').value)/100,
+    m:parseFloat($('sl-m').value)/100,
+    moff:parseFloat($('sl-moff').value)/100,
+    w:parseFloat($('sl-w').value)/100,
+    tg:parseFloat($('sl-tg').value)/100,
+    dw:parseFloat($('sl-dw').value)/100,
+  };
+}
+
+/* ── DCF ── */
+function dcfSingle(rev,margin,wacc,tg,baseRev){
+  if(wacc<=tg)return null;
+  let fcfPV=0,revT=baseRev;
+  for(let t=1;t<=5;t++){
+    revT*=(1+rev);
+    const fcf=revT*margin*0.79*0.72;
+    fcfPV+=fcf/Math.pow(1+wacc,t);
+  }
+  const tvFCF=revT*(1+tg)*margin*0.79*0.72;
+  const tvPV=(tvFCF/(wacc-tg))/Math.pow(1+wacc,5);
+  return fcfPV+tvPV;
+}
+
+/* ── SIMULATION ── */
+function runSim(p){
+  const t0=performance.now();
+  const baseRev=4.5,usdgbp=1.27,netCash=1.5;
+  const results=[];
+  for(let i=0;i<p.N;i++){
+    const rev=lnorm(p.rev,p.revsd);
+    const margin=tri(Math.max(0.05,p.m-p.moff),p.m,Math.min(0.65,p.m+0.07));
+    const wacc=lnorm(p.w,p.w*0.17);
+    const tg=p.tg;
+    const evDCF=dcfSingle(rev,margin,wacc,tg,baseRev);
+    if(!evDCF)continue;
+    let revT=baseRev;for(let t=1;t<=5;t++)revT*=(1+rev);
+    const ev=p.dw*evDCF+(1-p.dw)*revT*12;
+    const eqUSD=(ev+netCash)*usdgbp;
+    if(eqUSD>0&&eqUSD<500)results.push(eqUSD);
+  }
+  results.sort((a,b)=>a-b);
+  return{results,ms:Math.round(performance.now()-t0)};
+}
+
+function pct(arr,p){return arr[Math.min(Math.floor(p/100*arr.length),arr.length-1)]||0;}
+function avg(arr){return arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;}
+
+/* ── DISTRIBUTION ── */
+let distChart=null;
+function renderDist(results,p){
+  const p10=pct(results,10),p50=pct(results,50),p90=pct(results,90),mn=avg(results);
+  const ab75=results.filter(v=>v>=75).length/results.length*100;
+  $('s-p10').textContent='$'+Math.round(p10)+'B';
+  $('s-p50').textContent='$'+Math.round(p50)+'B';
+  $('s-p90').textContent='$'+Math.round(p90)+'B';
+  $('s-prob').textContent=Math.round(ab75)+'%';
+  $('k-mean').textContent='$'+Math.round(mn)+'B';
+  $('k-med').textContent='Median: $'+Math.round(p50)+'B';
+  const baseEV=dcfSingle(p.rev,p.m,p.w,p.tg,4.5)||0;
+  const baseEVblend=p.dw*baseEV+(1-p.dw)*(4.5*Math.pow(1+p.rev,5)*12);
+  const baseEq=(baseEVblend+1.5)*1.27;
+  $('k-base').textContent='$'+Math.round(baseEq)+'B';
+  $('k-base-sub').textContent='WACC: '+$('sl-w').value+'%';
+  $('k-band').textContent='$'+Math.round(p10)+'–$'+Math.round(p90)+'B';
+  $('k-ev').textContent='$'+Math.round((baseEV+1.5)*1.27)+'B';
+  $('k-ev-sub').textContent='EV/Rev: '+(baseEV/4.5).toFixed(1)+'x';
+  $('k-prem').textContent=((75/baseEq-1)*100).toFixed(0)+'%';
+
+  const bins=50,min=0,max=250,step=(max-min)/bins;
+  const counts=new Array(bins).fill(0),labels=[];
+  for(let i=0;i<bins;i++)labels.push('$'+Math.round(min+i*step)+'B');
+  results.forEach(v=>{const idx=Math.min(Math.floor((v-min)/step),bins-1);if(idx>=0)counts[idx]++;});
+  const colors=counts.map((_,i)=>{const m=min+(i+0.5)*step;return m<p10?'rgba(255,23,68,0.7)':m>p90?'rgba(0,230,118,0.7)':'rgba(0,212,255,0.65)';});
+  const borders=counts.map((_,i)=>{const m=min+(i+0.5)*step;return m<p10?'#ff1744':m>p90?'#00e676':'#00d4ff';});
+
+  if(distChart){
+    distChart.data.labels=labels;
+    distChart.data.datasets[0].data=counts;
+    distChart.data.datasets[0].backgroundColor=colors;
+    distChart.data.datasets[0].borderColor=borders;
+    distChart.update('none');
+  } else {
+    distChart=new Chart($('distC'),{type:'bar',
+      data:{labels,datasets:[{label:'Paths',data:counts,backgroundColor:colors,borderColor:borders,borderWidth:1,borderRadius:1}]},
+      options:{responsive:true,maintainAspectRatio:false,animation:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+' simulation paths',title:t=>t[0].label+' equity value'}}},
+        scales:{
+          x:{ticks:{autoSkip:true,maxTicksLimit:10,font:{size:8},color:'#4a7a99'},grid:{display:false},border:{color:'#1a3045'}},
+          y:{ticks:{font:{size:8},color:'#4a7a99'},grid:{color:'rgba(26,48,69,0.6)'},border:{color:'#1a3045'},title:{display:true,text:'simulation count',font:{size:8},color:'#4a7a99'}}
+        }
+      }
+    });
+  }
+}
+
+/* ── CASH FLOW TABLE ── */
+function renderCF(p){
+  $('cf-wacc-lbl').textContent=$('sl-w').value+'%';
+  $('cf-tg-lbl').textContent=$('sl-tg').value+'%';
+  const rev=p.rev,m=p.m,w=p.w,tg=p.tg;
+  const actuals={
+    rev:[1.80,3.10,4.50],
+    pbt:[0.43,1.09,1.70],
+    tax:[-0.09,-0.23,-0.36],
+    nopat:[0.34,0.86,1.34],
+    reinv:[-0.10,-0.24,-0.38],
+    fcf:[0.24,0.62,0.97]
+  };
+  let revT=4.5,ests=[];
+  for(let t=1;t<=5;t++){
+    revT*=(1+rev);
+    const pbt=revT*m,nopat=pbt*0.79,reinv=nopat*0.28,fcf=nopat-reinv;
+    const pvf=1/Math.pow(1+w,t),pvfcf=fcf*pvf;
+    ests.push({revT,pbt,nopat,reinv,fcf,pvf,pvfcf});
+  }
+  const tvFCF=revT*(1+tg)*m*0.79*0.72;
+  const tv=tvFCF/(w-tg);
+  const tvPV=tv/Math.pow(1+w,5);
+  const sumPVFCF=ests.reduce((a,x)=>a+x.pvfcf,0);
+  const ev=sumPVFCF+tvPV;
+
+  const f=v=>'£'+Math.abs(v).toFixed(2)+'B';
+  const fe=v=>(v<0?'('+f(-v)+')':f(v));
+
+  const rows=[
+    {lbl:'Revenue',cls:'acc',a:actuals.rev,e:ests.map(x=>f(x.revT))},
+    {lbl:'Profit Before Tax',cls:'grn',a:actuals.pbt,e:ests.map(x=>f(x.pbt))},
+    {lbl:'  Tax @ 21%',cls:'red',a:actuals.tax,e:ests.map(x=>'('+f(x.pbt*0.21)+')')},
+    {lbl:'NOPAT',cls:'amb',a:actuals.nopat,e:ests.map(x=>f(x.nopat)),bold:true},
+    {lbl:'  Reinvestment @ 28%',cls:'red',a:actuals.reinv,e:ests.map(x=>'('+f(x.reinv)+')')},
+    {lbl:'Free Cash Flow',cls:'grn',a:actuals.fcf,e:ests.map(x=>f(x.fcf)),bold:true},
+    {lbl:'PV Factor',cls:'text3',a:[null,null,null],e:ests.map(x=>x.pvf.toFixed(4))},
+    {lbl:'PV of FCF',cls:'pur',a:[null,null,null],e:ests.map(x=>f(x.pvfcf))},
+  ];
+
+  const tbody=$('cf-body');tbody.innerHTML='';
+  rows.forEach(row=>{
+    const tr=document.createElement('tr');
+    if(row.bold)tr.classList.add('total');
+    let h=`<td class="${row.cls}" style="${row.bold?'font-weight:700':''}">${row.lbl}</td>`;
+    [0,1,2].forEach(i=>{ const v=row.a[i]; h+=`<td class="${row.cls}">${v!=null?f(v):'—'}</td>`; });
+    row.e.forEach(v=>{ h+=`<td class="${row.cls}" style="opacity:0.88">${v}</td>`; });
+    tr.innerHTML=h; tbody.appendChild(tr);
+  });
+
+  const trTV=document.createElement('tr');trTV.classList.add('total');
+  trTV.innerHTML=`<td class="pur">Terminal Value (PV)</td><td colspan="3" style="color:var(--text3);text-align:left;font-size:9px">Gordon Growth: FCF₂₀₃₀×(1+${(tg*100).toFixed(1)}%) ÷ (WACC−TG) ÷ (1+WACC)⁵</td><td colspan="4" class="pur" style="font-weight:700">£${tvPV.toFixed(2)}B</td>`;
+  tbody.appendChild(trTV);
+
+  const trEV=document.createElement('tr');trEV.classList.add('total');
+  trEV.innerHTML=`<td class="acc" style="font-weight:700">Enterprise Value (DCF only)</td><td colspan="3"></td><td colspan="4" class="acc" style="font-weight:700">£${ev.toFixed(2)}B &nbsp;≈ $${((ev+1.5)*1.27).toFixed(1)}B equity</td>`;
+  tbody.appendChild(trEV);
+}
+
+/* ── REVENUE MIX ── */
+let growthChart=null;
+function renderRevMix(){
+  const streams=[
+    {lbl:'Card Payments',pct:22.2,val:1.00,col:'#00d4ff'},
+    {lbl:'Interest Income',pct:21.6,val:0.97,col:'#00e676'},
+    {lbl:'Subscriptions',pct:15.7,val:0.71,col:'#bb86fc'},
+    {lbl:'Wealth & Crypto',pct:14.7,val:0.66,col:'#ffc400'},
+    {lbl:'FX Income',pct:13.4,val:0.60,col:'#ff6d00'},
+    {lbl:'Other / Business',pct:12.4,val:0.56,col:'#78909c'},
+  ];
+  const mix=$('mix25');mix.innerHTML='';
+  const maxPct=Math.max(...streams.map(s=>s.pct));
+  streams.forEach(s=>{
+    mix.innerHTML+=`<div class="rev-stream">
+      <div class="rev-lbl">${s.lbl}</div>
+      <div class="rev-bg"><div class="rev-fill" style="width:${(s.pct/maxPct*100).toFixed(0)}%;background:${s.col}">${s.pct}%</div></div>
+      <div class="rev-amt">£${s.val.toFixed(2)}B</div>
+    </div>`;
+  });
+
+  if(growthChart){growthChart.destroy();growthChart=null;}
+  growthChart=new Chart($('growthC'),{
+    type:'bar',
+    data:{
+      labels:['FY2023A','FY2024A','FY2025A'],
+      datasets:[
+        {label:'Revenue (£B)',data:[1.80,3.10,4.50],backgroundColor:['rgba(0,212,255,0.4)','rgba(0,212,255,0.6)','rgba(0,212,255,0.9)'],borderColor:'#00d4ff',borderWidth:1},
+        {label:'PBT (£B)',data:[0.43,1.09,1.70],backgroundColor:['rgba(0,230,118,0.4)','rgba(0,230,118,0.6)','rgba(0,230,118,0.9)'],borderColor:'#00e676',borderWidth:1},
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{display:true,labels:{color:'#8ab4cc',font:{size:9,family:'Courier New'},boxWidth:10}}},
+      scales:{
+        x:{ticks:{color:'#4a7a99',font:{size:9}},grid:{display:false},border:{color:'#1a3045'}},
+        y:{ticks:{color:'#4a7a99',font:{size:9}},grid:{color:'rgba(26,48,69,0.5)'},border:{color:'#1a3045'}}
+      }
+    }
+  });
+}
+
+/* ── SCENARIOS ── */
+function renderScen(){
+  const sc=[
+    {n:'Deep Bear',b:'bear',rev:12,m:20,w:15,tg:2.0},
+    {n:'Bear',b:'bear',rev:22,m:28,w:13,tg:2.5},
+    {n:'Base Case',b:'base',rev:38,m:38,w:11,tg:3.5},
+    {n:'Bull',b:'bull',rev:50,m:45,w:10,tg:4.0},
+    {n:'Super Bull',b:'bull',rev:65,m:52,w:9,tg:4.5},
+  ];
+  const dw=parseFloat($('sl-dw').value)/100;
+  const body=$('scen-body');body.innerHTML='';
+  sc.forEach(s=>{
+    const evDCF=dcfSingle(s.rev/100,s.m/100,s.w/100,s.tg/100,4.5)||0;
+    let revT=4.5;for(let t=1;t<=5;t++)revT*=(1+s.rev/100);
+    const ev=dw*evDCF+(1-dw)*revT*12;
+    const eqUSD=(ev+1.5)*1.27;
+    const vs=((eqUSD/75-1)*100).toFixed(0);
+    const vsStr=(vs>0?'+':'')+vs+'%';
+    const vsc=parseInt(vs)>0?'var(--green)':parseInt(vs)===0?'var(--amber)':'var(--red)';
+    body.innerHTML+=`<tr>
+      <td><span class="badge ${s.b}">${s.n}</span></td>
+      <td>${s.rev}%</td><td>${s.m}%</td><td>${s.w}%</td><td>${s.tg}%</td>
+      <td class="acc">£${ev.toFixed(1)}B</td>
+      <td class="acc">$${Math.round(eqUSD)}B</td>
+      <td class="text3">${(ev/4.5).toFixed(1)}x</td>
+      <td style="color:${vsc};font-weight:700">${vsStr}</td>
+    </tr>`;
+  });
+}
+
+/* ── SENSITIVITY ── */
+function renderSens(baseResults){
+  const baseMed=pct(baseResults,50);
+  const vars=[
+    {lbl:'Revenue CAGR (+10pp)',key:'rev',delta:0.10,inv:false},
+    {lbl:'PBT Margin (+8pp)',key:'m',delta:0.08,inv:false},
+    {lbl:'WACC (−2pp)',key:'w',delta:0.02,inv:true},
+    {lbl:'Terminal Growth (+1pp)',key:'tg',delta:0.01,inv:false},
+    {lbl:'DCF Weight (+20pp)',key:'dw',delta:0.20,inv:false},
+    {lbl:'Rev Std Dev (+8pp)',key:'revsd',delta:0.08,inv:false},
+  ];
+  const impacts=vars.map(v=>{
+    const p=getP();p.N=2000;
+    if(v.inv)p[v.key]-=v.delta;else p[v.key]+=v.delta;
+    const {results:r}=runSim(p);
+    return{lbl:v.lbl,delta:pct(r,50)-baseMed};
+  });
+  const maxAbs=Math.max(...impacts.map(x=>Math.abs(x.delta)),0.1);
+  const cont=$('sens-cont');cont.innerHTML='';
+  impacts.forEach(x=>{
+    const pw=Math.round(Math.abs(x.delta)/maxAbs*100);
+    const col=x.delta>=0?'#00e676':'#ff1744';
+    const dir=x.delta>=0?'▲':'▼';
+    cont.innerHTML+=`<div class="sens-row">
+      <span class="sens-lbl">${x.lbl}</span>
+      <div class="sens-bg"><div class="sens-fill" style="width:${pw}%;background:${col}"></div></div>
+      <span class="sens-num" style="color:${col}">${dir}$${Math.abs(x.delta).toFixed(1)}B</span>
+    </div>`;
+  });
+}
+
+/* ── COMPARABLES ── */
+function renderComp(){
+  const peers=[
+    {co:'Revolut ★',hl:true,rev:'£4.5B (FY2025)',pbt:'£1.7B — 38% margin',val:'$75B (Nov 2025)',cagr:'76% (4-yr)',note:'Private | Europe #1 fintech',mult:16.7},
+    {co:'Nubank (NU)',hl:false,rev:'$2.4B (FY2024)',pbt:'$378M — 16% margin',val:'~$55B',cagr:'27%',note:'NYSE | Brazil / LatAm',mult:22.9},
+    {co:'Wise (WISE.L)',hl:false,rev:'£1.05B (FY2024)',pbt:'£481M — 46% margin',val:'~£7.5B',cagr:'11%',note:'LSE listed | FX focused',mult:7.1},
+    {co:'Klarna',hl:false,rev:'$2.8B (FY2024)',pbt:'$21M — 1% margin',val:'~$15B',cagr:'18%',note:'IPO pending | BNPL',mult:5.4},
+    {co:'Monzo',hl:false,rev:'£880M (FY2024)',pbt:'£15M — 2% margin',val:'~$5.9B',cagr:'~40%',note:'Private | UK challenger',mult:6.7},
+    {co:'Stripe',hl:false,rev:'~$21B (FY2024)',pbt:'~$1.4B — 7% margin',val:'$70B',cagr:'~25%',note:'Private | Payments infra',mult:3.3},
+  ];
+  const grid=$('comp-grid');grid.innerHTML='';
+  peers.forEach(p=>{
+    grid.innerHTML+=`<div class="comp-card${p.hl?' hl':''}">
+      <div class="comp-co${p.hl?' primary':''}">${p.co}</div>
+      <div class="comp-row">Revenue <span>${p.rev}</span></div>
+      <div class="comp-row">Profitability <span>${p.pbt}</span></div>
+      <div class="comp-row">Valuation <span>${p.val}</span></div>
+      <div class="comp-row">Rev CAGR <span>${p.cagr}</span></div>
+      <div class="comp-row">Notes <span style="color:var(--text3)">${p.note}</span></div>
+      <div class="comp-mult">EV/Rev ${p.mult.toFixed(1)}x</div>
+    </div>`;
+  });
+}
+
+/* ── MASTER RUN ── */
+function run(){
+  const btn=$('run-btn');
+  btn.textContent='⟳ RUNNING...';
+  btn.disabled=true;
+  setTimeout(()=>{
+    const p=getP();
+    const{results,ms}=runSim(p);
+    $('k-iter').textContent=results.length.toLocaleString();
+    $('k-ms').textContent=ms+'ms runtime';
+    renderDist(results,p);
+    renderCF(p);
+    renderRevMix();
+    renderScen();
+    renderSens(results);
+    renderComp();
+    btn.textContent='▶ RUN MONTE CARLO';
+    btn.disabled=false;
+  },40);
+}
+
+$('run-btn').addEventListener('click',run);
+run();
+</script>
+</body>
+</html>
